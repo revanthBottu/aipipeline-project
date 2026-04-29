@@ -1,160 +1,175 @@
-"""
-Command line runner for the Music Recommender Simulation.
-
-Run from the project root:
-    python -m src.main
-
-Or from the src/ directory:
-    python main.py
-"""
-
 import sys
 import os
+import logging
+from pathlib import Path
 
-# Allow running as `python main.py` from inside src/
-sys.path.insert(0, os.path.dirname(__file__))
+# Ensure src/ is on the path when running via `streamlit run src/main.py`
+sys.path.insert(0, str(Path(__file__).parent))
 
-from recommender import load_songs, recommend_songs
+from dotenv import load_dotenv
+load_dotenv()
 
+# Set up logging before importing app modules
+_logs_dir = Path(__file__).parent.parent / "logs"
+_logs_dir.mkdir(exist_ok=True)
 
-# ---------------------------------------------------------------------------
-# User profiles
-# Each dict is a taste profile. Supported keys:
-#   genre            (str)   — preferred genre
-#   mood             (str)   — preferred mood
-#   energy           (float) — target energy level 0–1
-#   likes_acoustic   (bool)  — True = prefers acoustic; False = prefers electronic
-#   target_danceability (float) — preferred danceability 0–1 (optional)
-#   target_valence      (float) — preferred emotional positivity 0–1 (optional)
-#   target_tempo_bpm    (float) — preferred BPM (optional)
-#   avoid_mood       (str)   — mood to down-rank (optional)
-#   avoid_genre      (str)   — genre to down-rank (optional)
-# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(_logs_dir / "app.log"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
 
-PROFILES = [
-    {
-        "name": "Gym Warrior",
-        "description": "Crushing a workout — needs maximum energy and drive.",
-        "genre": "pop",
-        "mood": "intense",
-        "energy": 0.95,
-        "likes_acoustic": False,
-        "target_danceability": 0.88,
-        "target_tempo_bpm": 138,
-        "avoid_mood": "chill",
-    },
-    {
-        "name": "Deep Focus",
-        "description": "Long coding session — low distraction, steady flow.",
-        "genre": "lofi",
-        "mood": "focused",
-        "energy": 0.38,
-        "likes_acoustic": True,
-        "target_danceability": 0.50,
-        "target_valence": 0.55,
-        "target_tempo_bpm": 80,
-        "avoid_mood": "excited",
-        "avoid_genre": "metal",
-    },
-    {
-        "name": "Late Night Driver",
-        "description": "Cruising alone at 2 AM — moody and cinematic.",
-        "genre": "synthwave",
-        "mood": "moody",
-        "energy": 0.72,
-        "likes_acoustic": False,
-        "target_valence": 0.38,
-        "target_tempo_bpm": 112,
-        "avoid_mood": "happy",
-    },
-    {
-        "name": "Sunday Acoustic",
-        "description": "Slow morning with coffee — warm, organic, unhurried.",
-        "genre": "folk",
-        "mood": "relaxed",
-        "energy": 0.28,
-        "likes_acoustic": True,
-        "target_danceability": 0.40,
-        "target_valence": 0.68,
-        "target_tempo_bpm": 86,
-        "avoid_genre": "edm",
-        "avoid_mood": "intense",
-    },
-    {
-        "name": "Party Mode",
-        "description": "Pre-game energy — loud, fast, impossible not to move.",
-        "genre": "edm",
-        "mood": "excited",
-        "energy": 0.93,
-        "likes_acoustic": False,
-        "target_danceability": 0.92,
-        "target_tempo_bpm": 140,
-        "avoid_mood": "sad",
-        "avoid_genre": "classical",
-    },
-    {
-        "name": "Jazz Evening",
-        "description": "Dinner at home — sophisticated, relaxed, slightly smoky.",
-        "genre": "jazz",
-        "mood": "relaxed",
-        "energy": 0.36,
-        "likes_acoustic": True,
-        "target_danceability": 0.52,
-        "target_valence": 0.68,
-        "target_tempo_bpm": 90,
-        "avoid_mood": "intense",
-        "avoid_genre": "metal",
-    },
-    {
-        "name": "Rainy Day Feels",
-        "description": "Overcast sky, comfort food, a little melancholy.",
-        "genre": "blues",
-        "mood": "sad",
-        "energy": 0.34,
-        "likes_acoustic": True,
-        "target_valence": 0.28,
-        "target_tempo_bpm": 74,
-        "avoid_mood": "excited",
-        "avoid_genre": "edm",
-    },
-    {
-        "name": "Hip Hop Head",
-        "description": "Walking through the city — sharp, rhythmic, confident.",
-        "genre": "hip-hop",
-        "mood": "focused",
-        "energy": 0.70,
-        "likes_acoustic": False,
-        "target_danceability": 0.82,
-        "target_tempo_bpm": 96,
-        "avoid_mood": "relaxed",
-    },
-]
+import streamlit as st
+from recommender import load_songs, retrieve_candidates
+from ai_engine import parse_vibe, rank_songs
 
+DATA_PATH = Path(__file__).parent.parent / "data" / "songs.csv"
 
-def print_recommendations(profile: dict, recommendations: list) -> None:
-    print("=" * 60)
-    print(f"  {profile['name'].upper()}")
-    print(f"  {profile['description']}")
-    print("=" * 60)
-    for i, (song, score, explanation) in enumerate(recommendations, 1):
-        print(f"  {i}. {song['title']} by {song['artist']}")
-        print(f"     Score: {score:.2f}  |  {song['genre']} / {song['mood']}  |  energy {song['energy']:.2f}")
-        print(f"     Why: {explanation}")
-    print()
+# ── Page config ──────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="AI Music Recommender",
+    page_icon="🎵",
+    layout="centered",
+)
 
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.header("⚙️ Configuration")
 
-def main() -> None:
-    # Resolve path relative to project root regardless of where the script is run from
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(script_dir, "..", "data", "songs.csv")
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if api_key:
+        st.success("API key loaded from environment")
+    else:
+        api_key = st.text_input(
+            "Gemini API Key",
+            type="password",
+            help="Get a free key at https://aistudio.google.com/",
+        )
 
-    songs = load_songs(csv_path)
-    print(f"Loaded {len(songs)} songs.\n")
+    st.divider()
+    st.markdown("**How it works**")
+    st.markdown("1. You describe a mood or vibe")
+    st.markdown("2. Gemini AI interprets your description")
+    st.markdown("3. The system searches 100 songs")
+    st.markdown("4. Gemini selects the best matches")
+    st.divider()
+    st.caption("Powered by Gemini 2.0 Flash · RAG pipeline")
 
-    for profile in PROFILES:
-        recs = recommend_songs(profile, songs, k=5)
-        print_recommendations(profile, recs)
+# ── Header ────────────────────────────────────────────────────────────────────
+st.title("🎵 AI Music Recommender")
+st.markdown("*Describe your mood or vibe — AI will find the perfect songs for you.*")
+st.divider()
 
+# ── Input ─────────────────────────────────────────────────────────────────────
+user_input = st.text_area(
+    "What's your vibe?",
+    placeholder=(
+        "Try something like:\n"
+        "  • \"Chill late-night coding session, lofi beats, low energy...\"\n"
+        "  • \"Hype workout music, fast and intense, no sad stuff...\"\n"
+        "  • \"Melancholic rainy Sunday, acoustic and a little sad...\""
+    ),
+    height=130,
+)
 
-if __name__ == "__main__":
-    main()
+col_btn, col_num = st.columns([3, 1])
+with col_btn:
+    find_btn = st.button("🎯  Find My Songs", type="primary", use_container_width=True)
+with col_num:
+    num_results = st.selectbox("Show", [5, 10], index=0, label_visibility="visible")
+
+# ── Main logic ────────────────────────────────────────────────────────────────
+if find_btn:
+    if not user_input.strip():
+        st.warning("Please describe your vibe first!")
+        st.stop()
+    if not api_key:
+        st.error("Enter your Gemini API key in the sidebar to continue.")
+        st.stop()
+
+    try:
+        songs = load_songs(str(DATA_PATH))
+    except FileNotFoundError:
+        st.error(f"Songs database not found at `{DATA_PATH}`. Check your project setup.")
+        logger.error("songs.csv not found at %s", DATA_PATH)
+        st.stop()
+
+    st.divider()
+
+    with st.status("🤖  AI is finding your songs…", expanded=True) as status:
+
+        # Step 1 — Vibe parsing
+        st.write("🧠 **Step 1:** Interpreting your vibe with Gemini AI…")
+        try:
+            parsed = parse_vibe(user_input, api_key)
+        except Exception as e:
+            logger.error("Vibe parsing failed: %s", e)
+            status.update(label="Failed to interpret vibe", state="error")
+            st.error(f"Could not interpret your vibe: {e}")
+            st.stop()
+
+        st.write(
+            f"✅  Detected **{parsed.get('mood')}** mood · "
+            f"**{parsed.get('genre')}** genre · "
+            f"energy **{parsed.get('energy')}**"
+        )
+        st.caption(f"_{parsed.get('interpretation', '')}_")
+
+        # Step 2 — RAG retrieval
+        st.write(f"📚 **Step 2:** Searching {len(songs)} songs in the database…")
+        candidates = retrieve_candidates(songs, parsed, top_k=15)
+        st.write(f"✅  Found **{len(candidates)} candidate songs** matching your profile")
+
+        # Step 3 — AI ranking
+        st.write("🎯 **Step 3:** Gemini is selecting the best matches and scoring confidence…")
+        try:
+            ranked = rank_songs(user_input, parsed, candidates, api_key)
+        except Exception as e:
+            logger.error("Song ranking failed: %s", e)
+            status.update(label="Failed to rank songs", state="error")
+            st.error(f"Could not rank songs: {e}")
+            st.stop()
+
+        st.write(f"✅  Selected top **{len(ranked)} songs** with confidence scores")
+        status.update(label="✨  Recommendations ready!", state="complete", expanded=False)
+
+    # ── Results ───────────────────────────────────────────────────────────────
+    st.subheader("🎶 Your Personalized Playlist")
+
+    for i, rec in enumerate(ranked[:num_results], 1):
+        conf = int(rec.get("confidence", 0))
+        if conf >= 80:
+            color, label = "#22c55e", "Excellent"
+        elif conf >= 65:
+            color, label = "#f59e0b", "Good"
+        else:
+            color, label = "#64748b", "Fair"
+
+        with st.container(border=True):
+            left, right = st.columns([4, 1])
+            with left:
+                st.markdown(f"**{i}. {rec.get('title', 'Unknown')}**")
+                st.markdown(f"*{rec.get('artist', 'Unknown artist')}*")
+                st.markdown(f"> {rec.get('explanation', '')}")
+            with right:
+                st.markdown(
+                    f"<div style='text-align:center;padding:10px;border-radius:8px;"
+                    f"background:{color}22;border:1px solid {color};'>"
+                    f"<div style='font-size:1.6rem;font-weight:700;color:{color};'>{conf}%</div>"
+                    f"<div style='font-size:0.7rem;color:{color};'>{label}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    with st.expander("🔍 View AI Interpretation Details"):
+        st.json(parsed)
+
+    logger.info(
+        "Recommendation complete — %d songs returned for query '%.40s'",
+        len(ranked),
+        user_input,
+    )
