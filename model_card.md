@@ -2,7 +2,7 @@
 
 ## System Overview
 
-This system uses Google Gemini 2.0 Flash in a two-step RAG pipeline: once to parse a natural-language vibe description into structured music preferences, and again to rank candidate songs and generate explanations. A weighted scoring algorithm handles the retrieval step between the two AI calls.
+This system uses Google Gemini 2.5 Flash in a two-step RAG pipeline: once to parse a natural-language vibe description into structured music preferences, and again to rank candidate songs and generate explanations. A weighted scoring algorithm handles the retrieval step between the two AI calls.
 
 ---
 

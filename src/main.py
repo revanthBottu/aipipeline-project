@@ -40,24 +40,24 @@ st.set_page_config(
 with st.sidebar:
     st.header("⚙️ Configuration")
 
-    api_key = os.getenv("GEMINI_API_KEY", "")
+    api_key = os.getenv("GROQ_API_KEY", "")
     if api_key:
         st.success("API key loaded from environment")
     else:
         api_key = st.text_input(
-            "Gemini API Key",
+            "Groq API Key",
             type="password",
-            help="Get a free key at https://aistudio.google.com/",
+            help="Get a free key at https://console.groq.com/",
         )
 
     st.divider()
     st.markdown("**How it works**")
     st.markdown("1. You describe a mood or vibe")
-    st.markdown("2. Gemini AI interprets your description")
+    st.markdown("2. Groq AI interprets your description")
     st.markdown("3. The system searches 100 songs")
-    st.markdown("4. Gemini selects the best matches")
+    st.markdown("4. Groq selects the best matches")
     st.divider()
-    st.caption("Powered by Gemini 2.0 Flash · RAG pipeline")
+    st.caption("Powered by Llama 3.3 70B · RAG pipeline")
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.title("🎵 AI Music Recommender")
@@ -103,7 +103,7 @@ if find_btn:
     with st.status("🤖  AI is finding your songs…", expanded=True) as status:
 
         # Step 1 — Vibe parsing
-        st.write("🧠 **Step 1:** Interpreting your vibe with Gemini AI…")
+        st.write("🧠 **Step 1:** Interpreting your vibe with Groq AI…")
         try:
             parsed = parse_vibe(user_input, api_key)
         except Exception as e:

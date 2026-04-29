@@ -1,9 +1,11 @@
-from google import genai
+from groq import Groq
 import json
 import logging
 import re
 
 logger = logging.getLogger(__name__)
+
+MODEL = "llama-3.3-70b-versatile"
 
 VALID_MOODS = [
     "happy", "chill", "intense", "focused", "moody",
@@ -58,7 +60,6 @@ Rank from best match (index 0) to worst match. Be specific in explanations."""
 def _extract_json(text: str) -> str:
     """Strip markdown fences and extract the first JSON object or array."""
     text = re.sub(r"```(?:json)?\s*", "", text).replace("```", "").strip()
-    # Prefer array if the payload starts with '[', otherwise prefer object
     first_char = next((c for c in text if c in "{["), None)
     patterns = (
         [r"\[[\s\S]*\]", r"\{[\s\S]*\}"]
@@ -73,8 +74,8 @@ def _extract_json(text: str) -> str:
 
 
 def parse_vibe(user_input: str, api_key: str) -> dict:
-    """Call Gemini to convert a natural-language vibe into structured music preferences."""
-    client = genai.Client(api_key=api_key)
+    """Call Groq to convert a natural-language vibe into structured music preferences."""
+    client = Groq(api_key=api_key)
 
     prompt = _PARSE_PROMPT.format(
         user_input=user_input,
@@ -83,9 +84,12 @@ def parse_vibe(user_input: str, api_key: str) -> dict:
     )
 
     logger.info("Parsing vibe: '%.50s'", user_input)
-    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-    raw = response.text.strip()
-    logger.debug("Gemini parse raw response: %s", raw)
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = response.choices[0].message.content.strip()
+    logger.debug("Groq parse raw response: %s", raw)
 
     parsed = json.loads(_extract_json(raw))
     logger.info(
@@ -98,8 +102,8 @@ def parse_vibe(user_input: str, api_key: str) -> dict:
 
 
 def rank_songs(user_input: str, parsed_vibe: dict, candidates: list, api_key: str) -> list:
-    """Call Gemini to re-rank RAG candidates and generate per-song explanations."""
-    client = genai.Client(api_key=api_key)
+    """Call Groq to re-rank RAG candidates and generate per-song explanations."""
+    client = Groq(api_key=api_key)
 
     candidates_text = "\n".join(
         f"ID:{s['id']} | {s['title']} by {s['artist']} | "
@@ -110,10 +114,13 @@ def rank_songs(user_input: str, parsed_vibe: dict, candidates: list, api_key: st
 
     prompt = _RANK_PROMPT.format(user_input=user_input, candidates=candidates_text)
 
-    logger.info("Ranking %d candidates with Gemini", len(candidates))
-    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-    raw = response.text.strip()
-    logger.debug("Gemini rank raw response: %s", raw)
+    logger.info("Ranking %d candidates with Groq", len(candidates))
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = response.choices[0].message.content.strip()
+    logger.debug("Groq rank raw response: %s", raw)
 
     ranked = json.loads(_extract_json(raw))
     top5 = ranked[:5]
