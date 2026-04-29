@@ -52,3 +52,27 @@ In most test runs, all five returned songs received confidence scores between 75
 ## Intended Use
 
 This system is intended for personal use for commercial users.
+
+
+### Unit testing (10 tests)
+
+These test the RAG. They create a small set of 5 fake songs and run the scoring and retrieval functions directly, checking that the algorithm behaves correctly without any AI involvement.
+
+What each test verifies:
+
+- **Exact mood + genre match scores high** — a song that matches both the target mood and genre should produce a score above 5.0, confirming the +3.0 and +2.0 weights are applied.
+- **Mismatched song scores lower** — a lofi/chill song should always outscore an edm/excited song when the profile targets lofi/chill.
+- **Avoid mood reduces score** — adding `"avoid_moods": ["chill"]` to the profile should lower the score of a chill song compared to the same profile without the penalty.
+- **Avoid genre reduces score** — same logic for genre penalties.
+- **Energy proximity matters** — a song with energy 0.95 should score higher than one with energy 0.25 when the target energy is 0.95.
+- **Retrieve candidates returns correct count** — asking for top_k=3 should return exactly 3 songs.
+- **Top result is best match** — the lofi/chill song should always be first when the profile targets lofi/chill.
+- **top_k limit is respected** — tested at k=1, 2, and 5 to make sure the slice works correctly.
+- **Score returns a float** — basic type check so downstream code never receives a string or None.
+- **Valence target proximity** — a song with valence 0.20 should score higher against a low-valence profile than a high-valence profile.
+
+## Model Reflection
+
+If I had to go back and do this model again, I would use a different LLM, and then I would probably use a larger dataset for more diverse songs covering the nuances in a user's mood.
+
+One limitation this model has is that it generates the same songs for some complex moods, simply because of a smaller dataset. I should fix that.
