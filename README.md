@@ -2,7 +2,7 @@
 
 An end-to-end AI-powered music recommendation system that takes a natural-language mood or vibe description and returns a personalized playlist — powered by Google Gemini and a RAG (Retrieval-Augmented Generation) pipeline.
 
----
+---Video Link:https://www.loom.com/share/b0616294d9994c67a09ca40c090d781f
 
 ## Original Project
 
@@ -114,57 +114,6 @@ pytest tests/ -v
 
 ---
 
-### Example 2 — High-energy workout
-
-**Input:** `"I need hype workout music, fast and intense, something to push through the last rep"`
-
-**AI Interpretation:**
-```json
-{
-  "mood": "intense",
-  "genre": "edm",
-  "energy": 0.94,
-  "tempo_bpm": 142,
-  "valence": 0.80,
-  "interpretation": "Maximum energy, fast-tempo tracks for peak workout intensity"
-}
-```
-
-**Recommendations (sample):**
-| # | Song | Artist | Confidence | Explanation |
-|---|------|--------|------------|-------------|
-| 1 | Power Surge | EDM Squad | 96% | 145 BPM, near-maximum energy level — built for pushing physical limits. |
-| 2 | Overdrive | Bass Works | 90% | Relentless pace and high danceability that keeps adrenaline elevated. |
-| 3 | Red Line | Volt Engine | 83% | Driving synth progression that escalates through the track — perfect for the final push. |
-
----
-
-### Example 3 — Rainy Sunday melancholy
-
-**Input:** `"Melancholic rainy Sunday morning, something sad and acoustic, a little nostalgic"`
-
-**AI Interpretation:**
-```json
-{
-  "mood": "sad",
-  "genre": "folk",
-  "energy": 0.28,
-  "tempo_bpm": 72,
-  "valence": 0.22,
-  "acousticness": 0.85,
-  "interpretation": "Quiet, melancholic acoustic folk for a slow introspective morning"
-}
-```
-
-**Recommendations (sample):**
-| # | Song | Artist | Confidence | Explanation |
-|---|------|--------|------------|-------------|
-| 1 | Grey Morning | Blue Moon | 91% | Sparse acoustic guitar and a low valence (0.22) that perfectly mirrors Sunday sadness. |
-| 2 | Old Roads | Folk Drift | 86% | Nostalgic lyrical quality with unhurried 70 BPM tempo ideal for reflection. |
-| 3 | Fading Light | Solo Pine | 79% | High acousticness and melancholic mood make this a natural fit for overcast moods. |
-
----
-
 ## Design Decisions
 
 Using Gemini in two separate steps gives the best of both worlds: the first call extracts precise structured features (which the scoring algorithm needs), while the second call does semantic understanding of "fit" — something a pure feature-matching algorithm can't do well. Splitting the calls also makes each step testable independently.
@@ -199,3 +148,10 @@ ai-pipeline-project/
 ├── .env.example               # API key template
 └── requirements.txt
 ```
+
+## Reflection
+
+One thing I learned about AI pipelines is that compartmenting the problem into different parts of each feature makes testing and debugging way easier. By breaking down the part for Retrieval, and a new part for Generation, and a new part for Ranking and Justification, it became easy to build.
+
+One part of using Claude as an AI assistant was that it would sometimes underestimate the capabilities of the smaller models and make the algorithm for RAG messy.
+
