@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 import json
 import logging
 import re
@@ -56,8 +56,16 @@ Rank from best match (index 0) to worst match. Be specific in explanations."""
 
 
 def _extract_json(text: str) -> str:
+    """Strip markdown fences and extract the first JSON object or array."""
     text = re.sub(r"```(?:json)?\s*", "", text).replace("```", "").strip()
-    for pattern in [r"\{[\s\S]*\}", r"\[[\s\S]*\]"]:
+    # Prefer array if the payload starts with '[', otherwise prefer object
+    first_char = next((c for c in text if c in "{["), None)
+    patterns = (
+        [r"\[[\s\S]*\]", r"\{[\s\S]*\}"]
+        if first_char == "["
+        else [r"\{[\s\S]*\}", r"\[[\s\S]*\]"]
+    )
+    for pattern in patterns:
         match = re.search(pattern, text)
         if match:
             return match.group()
@@ -66,8 +74,7 @@ def _extract_json(text: str) -> str:
 
 def parse_vibe(user_input: str, api_key: str) -> dict:
     """Call Gemini to convert a natural-language vibe into structured music preferences."""
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    client = genai.Client(api_key=api_key)
 
     prompt = _PARSE_PROMPT.format(
         user_input=user_input,
@@ -76,7 +83,7 @@ def parse_vibe(user_input: str, api_key: str) -> dict:
     )
 
     logger.info("Parsing vibe: '%.50s'", user_input)
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
     raw = response.text.strip()
     logger.debug("Gemini parse raw response: %s", raw)
 
@@ -92,8 +99,7 @@ def parse_vibe(user_input: str, api_key: str) -> dict:
 
 def rank_songs(user_input: str, parsed_vibe: dict, candidates: list, api_key: str) -> list:
     """Call Gemini to re-rank RAG candidates and generate per-song explanations."""
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    client = genai.Client(api_key=api_key)
 
     candidates_text = "\n".join(
         f"ID:{s['id']} | {s['title']} by {s['artist']} | "
@@ -105,7 +111,7 @@ def rank_songs(user_input: str, parsed_vibe: dict, candidates: list, api_key: st
     prompt = _RANK_PROMPT.format(user_input=user_input, candidates=candidates_text)
 
     logger.info("Ranking %d candidates with Gemini", len(candidates))
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
     raw = response.text.strip()
     logger.debug("Gemini rank raw response: %s", raw)
 
